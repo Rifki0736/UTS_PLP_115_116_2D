@@ -113,10 +113,9 @@ class Lexer:
                 if self._peek() == "*" and self._peek(1) == "/":
                     self._advance()  # Lewati '*'
                     self._advance()  # Lewati '/'
-                    break
+                    return
                 self._advance()
-            return
-            raise LexError("komentar blok belum didukung", line, col)
+            raise LexError("komentar blok tidak tertutup", line, col)
         if ch in _SINGLE:
             self._add(_SINGLE[ch], ch, line, col)
             return
@@ -124,7 +123,9 @@ class Lexer:
             self._add(TokenType.OP, ch, line, col)
             return
         if ch == "<":
-            op = "<=" if self._match("=") else "<"
+            if self._match("="):   op = "<="
+            elif self._match(">"): op = "<>"
+            else:                  op = "<"
             self._add(TokenType.OP, op, line, col)
             return
         if ch == ">":
@@ -165,7 +166,10 @@ class Lexer:
                 raise LexError("string tidak ditutup", line, col)
             ch = self._advance()
             if ch == "'":
-                break
+                if self._peek() == "'":
+                    self._advance()
+                else:
+                    break
             chars.append(ch)
         self._add(TokenType.STRING, "".join(chars), line, col)
 
@@ -173,8 +177,8 @@ class Lexer:
         start = self.pos - 1
         while self._peek().isdigit():
             self._advance()
-        if self._peek() == "." and self._peek(1).isdigit():
-            self._advance()
+            if self._peek() == "." and self._peek(1).isdigit():
+                self._advance()
             while self._peek().isdigit():
                 self._advance()
         self._add(TokenType.NUMBER, self.src[start:self.pos], line, col)
