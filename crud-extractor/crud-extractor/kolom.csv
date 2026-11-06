@@ -1,0 +1,17 @@
+file,baris,tabel,kolom,operasi
+audit.sql,2,pelanggan,aktif,R
+audit.sql,2,pelanggan,id,R
+audit.sql,2,pelanggan,level,R
+audit.sql,2,pelanggan,nama,R
+audit.sql,2,pesanan,pelanggan_id,R
+audit.sql,2,pesanan,tanggal,R
+audit.sql,8,pelanggan,id,R
+audit.sql,8,pelanggan,nama,R
+audit.sql,8,pembayaran,pelanggan_id,R
+audit.sql,8,pembayaran,status,R
+audit.sql,12,pelanggan,id,R
+audit.sql,12,pelanggan,pelanggan_id,R
+audit.sql,12,pelanggan,total,R
+audit.sql,16,sesi,kedaluwarsa,R
+audit.sql,18,pengguna,aktif,R
+audit.sql,18,sesi,id,R

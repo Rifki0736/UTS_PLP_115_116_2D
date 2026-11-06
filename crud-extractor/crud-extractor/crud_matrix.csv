@@ -1,0 +1,5 @@
+file,pelanggan,pembayaran,pengguna,pesanan,sesi
+audit.sql,RU,R,R,RU,D
+campuran_error.sql,R,,,,
+laporan_penjualan.sql,,,,,
+pemeliharaan.sql,,,,,
