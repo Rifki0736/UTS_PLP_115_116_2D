@@ -3,6 +3,8 @@
 Grammar lengkap ada di SPESIFIKASI.md bagian 3. Setiap fungsi `_nama`
 kurang lebih berpadanan dengan satu aturan grammar.
 """
+from tracemalloc import start
+
 from . import ast_nodes as ast
 from .lexer import Token, TokenType as T, tokenize
 
@@ -210,8 +212,8 @@ class Parser:
                 rows.append(self._value_row())
             return ast.Insert(table, columns, rows, None, line=start.line)
         if self._check_kw("SELECT"):
-            # TODO(T1): dukung INSERT INTO ... SELECT ... (SPESIFIKASI.md bagian 3 dan 5).
-            
+            select_query = self._select()
+            return ast.Insert(table, columns, None, select_query, line=start.line)            
             raise ParseError("INSERT ... SELECT belum didukung", self._peek())
         raise ParseError("diharapkan VALUES atau SELECT", self._peek())
 
