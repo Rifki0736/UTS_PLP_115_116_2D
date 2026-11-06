@@ -184,8 +184,9 @@ class Lexer:
         while self._peek().isalnum() or self._peek() == "_":
             self._advance()
         text = self.src[start:self.pos]
-        if text in KEYWORDS:
-            self._add(TokenType.KEYWORD, text, line, col)
+        upper_text = text.upper()
+        if upper_text in KEYWORDS:
+            self._add(TokenType.KEYWORD, upper_text, line, col)
         else:
             self._add(TokenType.IDENT, text, line, col)
 
