@@ -33,7 +33,7 @@ regex         0.65    0.81   0.72
 
 ## 2. Tiga kasus di mana regex salah
 
-1. Teks di dalam string dan komentar dianggap SQL
+**1. Teks di dalam string dan komentar dianggap SQL**
 
 pada laporan_penjualan.sql terdapat baris kode sebagai berikut
 ```sql
@@ -46,7 +46,7 @@ GROUP BY p.nama;
 ```
 
 parser menghasilkan output sebagai berikut
-```csv
+```
 laporan_penjualan.sql,3,pelanggan,R
 laporan_penjualan.sql,3,pesanan,R
 ```
@@ -57,7 +57,7 @@ laporan_penjualan.sql,1,pelanggan,D
 ```
 regex bekerja pada teks mentah dan memotong dengan split(";"). Lexer mengubah '--' menjadi satu token STRING dan membuang token komentar sebelum parser melihat apa pun. Jadi kata DELETE pada baris komen tetap dianggap KEYWORD oleh regex.
 
-2.Sumber tabel yang dipisah koma
+**2.Sumber tabel yang dipisah koma**
 
 pada audit.sql terdapat baris kode sebagai berikut
 ```sql
@@ -70,7 +70,7 @@ WHERE o.pelanggan_id = p.id
 ```
 
 parser menghasilkan output sebagai berikut
-```csv
+```
 audit.sql,2,pelanggan,R
 audit.sql,2,pesanan,R
 ```
@@ -78,13 +78,13 @@ sedangkan regex hanya melakukan tokenizing pada tabel pertama saja. tabel kedua 
 ```
 audit.sql,2,pelanggan,R
 ```
-pola \bFROM\s+NAME hanya menangkap satu nama tepat setelah FROM. Tabel kedua muncul setelah koma dan tempat regex tidak punya pola. regex akan menghasilkan 2 token jika penulisannya seperti ini
+pola `\bFROM\s+NAME` hanya menangkap satu nama tepat setelah FROM. Tabel kedua muncul setelah koma dan tempat regex tidak punya pola. regex akan menghasilkan 2 token jika penulisannya seperti ini
 ```sql
 FROM pelanggan p; from pesanan o
 ```
 sedangkan parser mengumpulkan daftar table dalam `table_ref` sehingga mengetahui struktur datanya.
 
-3.Literal String yang Memuat Kata Kunci SQL
+**3.Literal String yang Memuat Kata Kunci SQL**
 
 pada laporan_penjualan.sql terdapat baris kode sebagai berikut
 ```sql
@@ -97,7 +97,7 @@ GROUP BY p.nama;
 ```
 
 parser menghasilkan output sebagai berikut
-```csv
+```
 laporan_penjualan.sql,3,pelanggan,R
 laporan_penjualan.sql,3,pesanan,R
 ```
