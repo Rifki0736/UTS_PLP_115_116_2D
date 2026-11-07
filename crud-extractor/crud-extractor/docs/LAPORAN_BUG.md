@@ -25,12 +25,17 @@ kode sebelumnya hanya mengecek kondisi '<=' dan '<' sehingga '<>' dianggap token
 
 **Perbaikan.** 
 lexer.py, def _scan_token
-if ch == "<":
-    if self._match("="):   op = "<="
-    elif self._match(">"): op = "<>"
-    else:                  op = "<"
-    self._add(TokenType.OP, op, line, col)
-    return
+```
+    def _scan_token(self) -> None:
+        line, col = self.line, self.col
+        ch = self._advance()
+        if ch == "<":
+            if self._match("="):   op = "<="
+            elif self._match(">"): op = "<>"
+            else:                  op = "<"
+            self._add(TokenType.OP, op, line, col)
+            return
+```
 
 **Test regresi.** 
 def test_bug1_lexer_mengambil_operator_terpanjang():
@@ -60,12 +65,22 @@ kode lama selalu mengganggap char ' sebagai penutup string tanpa mengecek char s
 
 **Perbaikan.** 
 lexer.py, def _string
-if ch == "'":
-    if self._peek() == "'":
-        self._advance()
-    else:
-       break
 
+```
+def _string(self, line: int, col: int) -> None:
+        chars: list[str] = []
+        while True:
+            if self._at_end():
+                raise LexError("string tidak ditutup", line, col)
+            ch = self._advance()
+            if ch == "'":
+                if self._peek() == "'":
+                    self._advance()
+                else:
+                    break
+            chars.append(ch)
+        self._add(TokenType.STRING, "".join(chars), line, col)
+```
 **Test regresi.** 
 def test_bug2_kutip_ganda_di_dalam_string():
 
@@ -90,7 +105,8 @@ SELECT a FROM t WHERE a = 1 OR b = 2 AND c = 3;
 **Perbaikan.** 
 parser.py,def _logical(dihapus), def _expr, def _or(baru), def _and(baru)
 
-def _expr(self): return self._or()
+```
+    def _expr(self): return self._or()
 
     def _or(self):
         left = self._and()
@@ -103,9 +119,8 @@ def _expr(self): return self._or()
         while self._match_kw("AND"):
             left = ast.BinaryOp(left, "AND", self._not())
         return left
-
+```
 kode ini melempar expr langsung menuju def _or yang dimana setiap pemanggilan def_or selalu memprioritaskan def_and sebagai ast.node kiri (jika ada) sebelum mengecek kondisi OR itu sendiri.
-    
 
 **Test regresi.** 
 def test_bug3_and_di_kiri_or()
