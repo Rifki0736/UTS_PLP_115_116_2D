@@ -38,7 +38,7 @@ lexer.py, def _scan_token
 ```
 
 **Test regresi.** 
-def test_bug1_lexer_mengambil_operator_terpanjang():
+def test_bug1_lexer_mengambil_operator_terpanjang() di tests/test_tambahan.py.
  
 **Peran AI.** 
 AI membantu saya dalam mengecek semua file dalam folder crud dan spesifikasi.md. memberikan saya informasi terkait bug potensial yang ada pada kode ini. lalu saya cek dan ternyata memang hanya ada 2 kondisi untuk percabangan token '<' yang seharusnya ada 3.
@@ -82,7 +82,7 @@ def _string(self, line: int, col: int) -> None:
         self._add(TokenType.STRING, "".join(chars), line, col)
 ```
 **Test regresi.** 
-def test_bug2_kutip_ganda_di_dalam_string():
+def test_bug2_kutip_ganda_di_dalam_string() di tests/test_tambahan.py.
 
 **Peran AI.** AI membantu saya dalam mengecek semua file dalam folder crud dan spesifikasi.md. memberikan saya informasi terkait bug potensial yang ada pada kode ini. lalu saya cek dan ternyata kode sebelumnya melakukan break langsung saat menemukan char '. kode perbaikan melakukan peek sekali lagi untuk menentukan apakah itu ' atau ''. saat menemukan char '' maka kode melakukan _anvance supaca kutip yang masuk dalam string hanya 1 (tidak jadi o''brien).
 
@@ -123,39 +123,106 @@ parser.py,def _logical(dihapus), def _expr, def _or(baru), def _and(baru)
 kode ini melempar expr langsung menuju def _or yang dimana setiap pemanggilan def_or selalu memprioritaskan def_and sebagai ast.node kiri (jika ada) sebelum mengecek kondisi OR itu sendiri.
 
 **Test regresi.** 
-def test_bug3_and_di_kiri_or()
+def test_bug3_and_di_kiri_or() di tests/test_tambahan.py.
 
 **Peran AI.** 
 AI membantu saya dalam mengecek semua file dalam folder crud dan spesifikasi.md. memberikan saya informasi terkait bug potensial yang ada pada kode ini. lalu saya cek dan ternyata kode sebelumnya melempar expr menuju def logika yang tidak melakukan perbandingan presedensi terhadap OR dan AND. def logic diganti menjadi 2 def terpisah yang memprioritaskan presedensi tertinggi yaitu AND
 
 ---
 
-## Bug 4: 
+## Bug 4: syntax INSERT INTO ..... SELECT tidak didukung
 
-**Ditemukan oleh:** (nama) · **Diperbaiki oleh:** (nama)
+**Ditemukan oleh:** Muhammad Rifki Aunur Rahman · **Diperbaiki oleh:** Muhammad Rifki Aunur Rahman
 
-**Gejala.** Input, output yang didapat, dan output yang diharapkan menurut SPESIFIKASI.md
-(sebutkan bagiannya).
+**Gejala.**
+input INSERT INTO ..... SELECT menghasilkan ParseError: Baris X, kolom Y: INSERT ... SELECT belum didukung, ditemukan 'SELECT'. kode seharusnya mendukung INSERT INTO ... SELECT sesuai spesifikasi.md bagian 5. Aturan CRUD (aturan lokal proyek)
 
-**Reproduksi minimal.** SQL terpendek yang memicu bug:
+**Reproduksi minimal.**
 
 ```sql
-
+INSERT INTO arsip (id) SELECT id FROM pesanan WHERE total > 10;
 ```
 
-**Akar masalah.** Mengapa kode lama salah? Konsep apa yang dilanggar?
+**Akar masalah.** kode lama hanya menghandle kondisi LPAREN, COMMA, dan VALUES. kode lama tidak menghandle kondisi SELECT.
 
-**Perbaikan.** File dan fungsi yang diubah, serta alasannya. Sebutkan juga perbaikan
-alternatif yang kalian pertimbangkan dan alasan tidak memilihnya.
+**Perbaikan.** 
+parser.py, def _insert
 
-**Test regresi.** Nama test di `tests/test_tambahan.py` yang gagal sebelum perbaikan dan lulus
-sesudahnya.
+```
+def _insert(self) -> ast.Insert:
+        start = self._expect_kw("INSERT")
+        self._expect_kw("INTO")
+        tok = self._peek()
+        table = ast.TableRef(self._table_name(), None, line=tok.line)
+        columns = []
+        if self._check(T.LPAREN) and not self._next_is_select():
+            self._advance()
+            columns.append(self._expect_ident("nama kolom").value.lower())
+            while self._match(T.COMMA):
+                columns.append(self._expect_ident("nama kolom").value.lower())
+            self._expect(T.RPAREN, "')' penutup daftar kolom")
+        if self._match_kw("VALUES"):
+            rows = [self._value_row()]
+            while self._match(T.COMMA):
+                rows.append(self._value_row())
+            return ast.Insert(table, columns, rows, None, line=start.line)
+        if self._check_kw("SELECT"):
+            select_query = self._select()
+            return ast.Insert(table, columns, None, select_query, line=start.line)            
+            raise ParseError("INSERT ... SELECT belum didukung", self._peek())
+        raise ParseError("diharapkan VALUES atau SELECT", self._peek())
+```
+kode ini menghandle kondisi SELECT setelah token INSERT INTO
 
-**Peran AI.** Apakah AI membantu menemukan atau memperbaiki bug ini? Bagaimana kalian
-memverifikasinya?
+**Test regresi.** 
+def test_insert_select() di tests/test_parser.py.
+
+**Peran AI.** 
+AI membantu saya dalam mengecek semua file dalam folder crud dan spesifikasi.md. memberikan saya informasi terkait bug potensial yang ada pada kode ini. lalu saya cek dan ternyata kode insert sebelumnya tidak menangani kondisi token SELECT sehingga perlu ditambahkan implementasinya. ini adalah salah satu penugasan TODO.
 
 ---
-## Bug 5: Urutan pencarian scope terbalik pada _lookup menggagalkan shadowing alias di subquery
+
+## Bug 5: keyword case sensitive
+
+**Ditemukan oleh:** Muhammad Rifki Aunur Rahman · **Diperbaiki oleh:** Muhammad Rifki Aunur Rahman
+
+**Gejala.**
+input 'select' menghasilkan token 'IDENT' padahal seharusnya menghasilkan token 'KEYWORD'. ini terjadi karena langsung membandingkan input dengan string 'SELECT' sehingga dianggap berbeda. seharusnya keyword tidak peka kapital sesuai spesifikasi.md bagian 2.2 Keyword dan identifier.
+
+**Reproduksi minimal.**
+
+```sql
+select id from t;
+```
+
+**Akar masalah.** kode lama  langsung membandingkan input 'select' dengan string 'SELECT' sehingga dianggap berbeda.
+
+**Perbaikan.** 
+lexer.py, def _word
+
+```
+    def _word(self, line: int, col: int) -> None:
+        start = self.pos - 1
+        while self._peek().isalnum() or self._peek() == "_":
+            self._advance()
+        text = self.src[start:self.pos]
+        upper_text = text.upper()
+        if upper_text in KEYWORDS:
+            self._add(TokenType.KEYWORD, upper_text, line, col)
+        else:
+            self._add(TokenType.IDENT, text, line, col)
+```
+kode ini menghandle input menjadi uppercase baru membandingkannya dengan keyword.
+
+**Test regresi.** 
+def test_keyword_huruf_kecil() di tests/test_lexer.py.
+
+**Peran AI.** 
+AI membantu saya dalam mengecek semua file dalam folder crud dan spesifikasi.md. memberikan saya informasi terkait bug potensial yang ada pada kode ini. lalu saya cek dan ternyata kode sebelumnya menerima input 'select' akan tetapi menghasilkan token 'IDENT' padahal seharusnya menghasilkan token 'KEYWORD'. maka operasi pengecekan dilakukan setelah proses uppercase
+
+---
+
+## Bug 6: Urutan pencarian scope terbalik pada _lookup menggagalkan shadowing alias di subquery
 
 **Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
 
@@ -183,7 +250,7 @@ AI membantu menunjukkan bahwa pada output --ast untuk audit.sql baris 12, x.tota
 
 ---
 
-## Bug 6: Scope pada statement DELETE bocor ke statement berikutnya karena tidak di-pop
+## Bug 7: Scope pada statement DELETE bocor ke statement berikutnya karena tidak di-pop
 **Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
 
 **Gejala.** 
@@ -209,7 +276,7 @@ AI membantu menemukan bahwa diagnostik error pada audit.sql baris 18 tidak muncu
 
 ---
 
-## Bug 7: Tabel di dalam subquery pada statement UPDATE ditandai sebagai operasi U (Update), bukan R (Read)
+## Bug 8: Tabel di dalam subquery pada statement UPDATE ditandai sebagai operasi U (Update), bukan R (Read)
 **Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
 
 **Gejala.** 
@@ -235,7 +302,7 @@ AI membantu menganalisis mengapa test_matrix_laporan_penjualan menghasilkan pesa
 
 ---
 
-## Bug 8: Mode --ast pada CLI mengalami crash (unhandled traceback) ketika file SQL mengandung LexError
+## Bug 9: Mode --ast pada CLI mengalami crash (unhandled traceback) ketika file SQL mengandung LexError
 **Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
 
 **Gejala.** 
