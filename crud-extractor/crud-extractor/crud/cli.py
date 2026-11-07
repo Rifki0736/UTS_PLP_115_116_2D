@@ -10,13 +10,18 @@ import sys
 from pathlib import Path
 
 from .ast_nodes import pretty
+from .lexer import LexError
 from .parser import parse_sql
 from .pipeline import analyze_source
 from .resolver import Resolver
 
 
 def _print_ast(path: Path) -> None:
-    script = parse_sql(path.read_text(encoding="utf-8"))
+    try:
+        script = parse_sql(path.read_text(encoding="utf-8"))
+    except LexError as err:          # LexError menghentikan pemrosesan file 
+        print(f"LEX ERROR: {err}")
+        return
     Resolver().resolve_script(script)
     for stmt in script.statements:
         print(f"--- baris {stmt.line} ---")
