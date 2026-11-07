@@ -178,6 +178,7 @@ class Parser:
             kind = "INNER"
         elif self._match_kw("LEFT"):
             kind = "LEFT"
+            self._match_kw("OUTER")
         self._expect_kw("JOIN")
         source = self._table_ref()
         self._expect_kw("ON")
@@ -213,7 +214,7 @@ class Parser:
             return ast.Insert(table, columns, rows, None, line=start.line)
         if self._check_kw("SELECT"):
             select_query = self._select()
-            return ast.Insert(table, columns, None, select_query, line=start.line)            
+            return ast.Insert(table, columns, [], select_query, line=start.line)            
             raise ParseError("INSERT ... SELECT belum didukung", self._peek())
         raise ParseError("diharapkan VALUES atau SELECT", self._peek())
 
