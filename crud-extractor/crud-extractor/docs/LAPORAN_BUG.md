@@ -155,3 +155,107 @@ sesudahnya.
 memverifikasinya?
 
 ---
+## Bug 5: Urutan pencarian scope terbalik pada _lookup menggagalkan shadowing alias di subquery
+
+**Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
+
+**Gejala.**
+Ketika query luar dan subquery di dalamnya sama-sama mendefinisikan alias bernama x (misalnya pelanggan x di luar dan pesanan x di dalam subquery pada audit.sql baris 12–14), referensi kolom x.pelanggan_id dan x.total di dalam subquery justru ter-resolve ke tabel luar pelanggan, bukan ke pesanan. Ini melanggar SPESIFIKASI.md bagian 4.3.
+
+**Reproduksi minimal.** 
+
+```sql
+SELECT x.id FROM pelanggan x
+WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x WHERE x.total > 5);
+```
+
+**Akar masalah.** 
+Berdasarkan konsep lexical scoping dan variable shadowing (Crafting Interpreters Bab 11, Resolving and Binding), pencarian nama dalam rantai lingkungan (environment/scope chain) wajib berjalan dari scope terdalam (innermost) menuju scope terluar (outermost), dan berhenti pada kecocokan pertama agar deklarasi lokal dapat menutupi (shadow) deklarasi luar yang bernama sama. Kode lama di Resolver._lookup() justru mengumpulkan rantai scope ke dalam list lalu membaliknya dengan reversed(chain), sehingga pencarian dimulai dari scope paling luar.
+
+**Perbaikan.** 
+Di crud/resolver.py pada metode _lookup(self, name: str), pembalikan reversed(chain) dihapus dan diganti dengan penelusuran langsung menggunakan pointer scope = self.scope lalu bergerak naik melalui scope = scope.parent sampai ditemukan atau None. Alternatif menyalin semua entri scope induk ke dalam dictionary scope anak saat _push() ditolak karena akan menyulitkan pendeteksian deklarasi alias ganda di dalam satu scope yang sama (aturan 4.2) serta membingungkan resolusi kolom tanpa qualifier yang hanya boleh melihat scope terdalam (aturan 4.3).
+
+**Test regresi.**
+test_bug7_resolver_shadowing_lookup_dari_scope_terdalam di tests/test_tambahan.py.
+
+**Peran AI.** 
+AI membantu menunjukkan bahwa pada output --ast untuk audit.sql baris 12, x.total mengarah ke -> pelanggan. dan Membantu membuatkan test secara keseluruhhan. Saya memeriksa metode _lookup di crud/resolver.py, menghapus reversed(), dan memverifikasi hasilnya kembali menggunakan py -m crud.cli data/sample/audit.sql --ast serta py -m pytest.
+
+---
+
+## Bug 6: Scope pada statement DELETE bocor ke statement berikutnya karena tidak di-pop
+**Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
+
+**Gejala.** 
+Setelah mengeksekusi DELETE FROM sesi s WHERE ...;, statement SELECT s.id FROM pengguna u; di bawahnya (seperti pada audit.sql baris 16–18) tidak menghasilkan error alias 's' tidak terdefinisi, melainkan me-resolve s.id ke tabel sesi dari statement DELETE sebelumnya. Ini melanggar SPESIFIKASI.md bagian 4.5.
+
+**Reproduksi minimal.** 
+```sql
+DELETE FROM sesi s WHERE s.a = 1;
+SELECT s.id FROM pengguna u;
+```
+
+**Akar masalah.** 
+Dalam pengelolaan block scope berbentuk tumpukan (stack-based lexical scope, Crafting Interpreters Bab 11), setiap operasi pembukaan scope (beginScope / _push()) ketika memasuki suatu unit sintaksis wajib dipasangkan secara seimbang dengan penutupan scope (endScope / _pop()) saat keluar dari unit tersebut. Pada metode Resolver._delete(), kode memanggil self._push() di awal untuk mendaftarkan tabel target DELETE, tetapi lupa memanggil self._pop() di akhir metode. Akibatnya, scope milik DELETE tertinggal di self.scope dan menjadi scope induk bagi statement berikutnya.
+
+**Perbaikan.** 
+Di crud/resolver.py pada akhir metode _delete(), ditambahkan pemanggilan self._pop() setelah self._expr(dele.where). Alternatif mereset self.scope = None secara paksa di awal resolve_statement() ditolak sebagai perbaikan utama karena hanya menyembunyikan gejala ketidakseimbangan tumpukan scope jika kelak ada struktur bersarang, meskipun menjaga invarian self.scope is None tetap baik.
+
+**Test regresi.**
+test_bug8_resolver_scope_delete_tidak_bocor_ke_statement_berikutnya di tests/test_tambahan.py
+
+**Peran AI.** 
+AI membantu menemukan bahwa diagnostik error pada audit.sql baris 18 tidak muncul karena self.scope masih berisi alias s. dan Membantu membuatkan test secara keseluruhan. Saya memeriksa _delete() di crud/resolver.py, menambahkan self._pop(), dan memverifikasinya dengan pytest.
+
+---
+
+## Bug 7: Tabel di dalam subquery pada statement UPDATE ditandai sebagai operasi U (Update), bukan R (Read)
+**Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
+
+**Gejala.** 
+Pada statement UPDATE yang memiliki subquery di klausa SET maupun WHERE (seperti di laporan_penjualan.sql baris 12 dan audit.sql baris 20), tabel yang berada di dalam subquery ikut tercatat memiliki operasi U di matriks CRUD. Seharusnya menurut SPESIFIKASI.md bagian 5, membaca tabel lewat subquery selalu menghasilkan operasi R, apa pun jenis statement luarnya.
+
+**Reproduksi minimal.** 
+```sql
+UPDATE pesanan SET status = 'BATAL'
+WHERE pelanggan_id IN (SELECT id FROM pelanggan WHERE diblokir = 1);
+```
+
+**Akar masalah.** 
+Dalam analisis semantik berbasis pohon sintaks abstrak (AST traversal pass, Crafting Interpreters Bab 5 & Bab 11), peran semantik sebuah node bergantung pada konteks strukturalnya di dalam AST. Pada crud/analyzer.py di cabang elif isinstance(stmt, ast.Update):, setelah menandai tabel target usage[stmt.table.name].add("U"), kode lama meneruskan argumen operasi "U" ke pemanggilan rekursif _collect(assignment.value, usage, "U") dan _collect(stmt.where, usage, "U"). Akibatnya, operasi "U" merambat turun ke seluruh subtree ekspresi termasuk subquery SELECT di dalamnya.
+
+**Perbaikan.** 
+Di crud/analyzer.py pada cabang ast.Update di dalam analyze_statement(), parameter operasi yang diteruskan ke _collect(assignment.value, usage, ...) dan _collect(stmt.where, usage, ...) diubah dari "U" menjadi "R", selaras dengan cabang ast.Delete dan ast.Insert. Alternatif memaksa _collect_select() untuk selalu menggunakan "R" dan menghapus parameter op ditolak karena akan mengubah tanda tangan fungsi internal yang sudah dipakai secara konsisten di modul tersebut.
+
+**Test regresi.**
+test_bug9_analyzer_subquery_dalam_update_selalu_read di tests/test_tambahan.py (serta test_matrix_laporan_penjualan di tests/test_analyzer.py).
+
+**Peran AI.** 
+AI membantu menganalisis mengapa test_matrix_laporan_penjualan menghasilkan pesanan: RUD alih-alih RD, dan Membantu membuatkan test secara keseluruhan. Saya memeriksa fungsi analyze_statement di crud/analyzer.py, mengubah "U" menjadi "R" pada penelusuran ekspresi UPDATE, dan memverifikasinya dengan pytest.
+
+---
+
+## Bug 8: Mode --ast pada CLI mengalami crash (unhandled traceback) ketika file SQL mengandung LexError
+**Ditemukan oleh:** Muhammad Nafis Idris · **Diperbaiki oleh:** Muhammad Nafis Idris
+
+**Gejala.** 
+Menjalankan python -m crud.cli <file> --ast pada file yang memiliki kesalahan leksikal (seperti string atau komentar blok yang tidak ditutup) menyebabkan program berhenti mendadak dengan Python traceback LexError, alih-alih mencetak pesan error yang rapi seperti pada mode normal. Ini melanggar SPESIFIKASI.md bagian 2.7.
+
+**Reproduksi minimal.** 
+```sql
+SELECT 'string tidak ditutup
+```
+
+**Akar masalah.** 
+Menurut arsitektur penanganan error kompilator (Crafting Interpreters Bab 4), kesalahan leksikal adalah kesalahan input pengguna yang harus dilaporkan secara terkendali oleh antarmuka utama (driver/CLI), bukan dibiarkan meledak sebagai uncaught exception dari runtime bahasa implementasi. Sementara analyze_source() di pipeline.py sudah membungkus parse_sql() dengan blok try ... except LexError, fungsi _print_ast() di crud/cli.py memanggil parse_sql() secara langsung tanpa menangkap LexError.
+
+**Perbaikan.** 
+Di crud/cli.py, LexError diimpor dari .lexer, kemudian pemanggilan parse_sql() di dalam _print_ast() dibungkus dengan try ... except LexError as err: yang mencetak f"LEX ERROR: {err}" lalu keluar (return) dari fungsi tersebut. Alternatif menangkap LexError di dalam parse_sql() ditolak karena docstring parse_sql dan kontrak API publik secara eksplisit menyatakan bahwa LexError tidak ditangkap di parse_sql.
+
+**Test regresi.**
+test_bug10_cli_ast_menangani_lex_error_tanpa_traceback di tests/test_tambahan.py.
+
+**Peran AI.** 
+AI menunjukkan bahwa jalur --ast di cli.py memotong kompas langsung ke parse_sql tanpa melewati analyze_source. dan Membantu membuatkan test secara keseluruhan. Saya menambahkan blok try-except LexError di _print_ast dan memverifikasinya melalui pytest.
+
+---
