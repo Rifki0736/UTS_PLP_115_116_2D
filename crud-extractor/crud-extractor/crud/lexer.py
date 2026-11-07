@@ -177,8 +177,8 @@ class Lexer:
         start = self.pos - 1
         while self._peek().isdigit():
             self._advance()
-            if self._peek() == "." and self._peek(1).isdigit():
-                self._advance()
+        if self._peek() == "." and self._peek(1).isdigit():
+            self._advance()    
             while self._peek().isdigit():
                 self._advance()
         self._add(TokenType.NUMBER, self.src[start:self.pos], line, col)
