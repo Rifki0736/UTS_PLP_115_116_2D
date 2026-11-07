@@ -3,17 +3,10 @@
 Tuliskan lima keputusan desain penting dalam pekerjaan kalian. Untuk tiap keputusan, sebutkan
 alternatif yang ditolak dan alasannya. Contoh topik (boleh memilih yang lain):
 
-- bagaimana parser membedakan `*` sebagai "semua kolom" dan sebagai perkalian;
-- di mana dan bagaimana presedensi `AND`/`OR` dinyatakan;
-- mengapa error recovery berhenti di `;`, bukan di keyword `SELECT` berikutnya;
-- urutan pencarian scope dan akibatnya pada shadowing serta correlated subquery;
-- mengapa kolom tanpa qualifier hanya dilihat di scope terdalam, dan apa kelemahannya;
-- bagaimana implementasi `INSERT ... SELECT` atau komentar blok kalian.
-
 | No | Keputusan | Alternatif yang ditolak | Alasan |
 | --- | --- | --- | --- |
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
+| 1 | **Membedakan makna token `*` (semua kolom, perkalian, atau argumen `COUNT(*)`) berdasarkan posisi aturan grammar di parser** (`_select_list`, `_multiplicative`, dan `_function_call`), sementara lexer selalu menghasilkan satu jenis token `TokenType.STAR`. | Membedakan jenis token `*` sejak di dalam Lexer (misalnya membuat token `ALL_COLS` dan `MUL` dengan melihat token sebelum/sesudahnya di lexer). | Lexer hanya bekerja pada tingkat karakter dengan *lookahead* terbatas dan tidak memiliki konteks struktur kalimat (*Crafting Interpreters* Bab 4–6). Menentukan peran `*` di parser membuat lexer tetap sederhana (*context-free* di tingkat leksikal) dan bebas dari tebakan heuristik yang rapuh. |
+| 2 | **Menyatakan presedensi `OR` dan `AND` melalui pemisahan tingkat fungsi di *Recursive Descent Parser*** (`_expr` $\rightarrow$ `_or` $\rightarrow$ `_and` $\rightarrow$ `_not`), di mana `_or` memanggil `_and` sebagai operan kiri dan kanan. | Menggabungkan `OR` dan `AND` dalam satu fungsi `_logical` lalu merombak/memutar ulang pohon AST setelah selesai dibuat (*post-parse tree rotation*). | Dengan memetakan setiap tingkat presedensi ke satu fungsi parser tersendiri (*Crafting Interpreters* Bab 6), pohon AST otomatis terbentuk dengan ikatan yang benar (`AND` lebih dalam/kuat daripada `OR`) dalam satu kali jalan tanpa perlu manipulasi pohon tambahan yang rawan bug. |
+| 3 | **Menghentikan pemulihan kesalahan (*panic mode*) di `_synchronize()` tepat setelah mengonsumsi delimiter `;`**, lalu melanjutkan parsing statement berikutnya. | Berhenti ketika mengintip (*peek*) keyword awal statement seperti `SELECT`, `INSERT`, `UPDATE`, atau `DELETE` tanpa harus mencapai `;`. | Di dalam SQL, keyword `SELECT` sering muncul di tengah-tengah statement lain sebagai subquery (misalnya di dalam `WHERE id IN (SELECT ...)` atau `INSERT ... SELECT`). Jika sinkronisasi berhenti pada `SELECT`, subquery di dalam statement yang rusak akan salah dianggap sebagai statement baru yang berdiri sendiri dan memicu rentetan *cascading error*. |
+| 4 | **Mencari *qualified column* (`p.nama`) dari scope terdalam ke scope terluar (`self.scope` $\rightarrow$ `parent`)** dan mengambil kecocokan pertama yang ditemukan. | Mencari dari scope terluar ke dalam (`reversed(chain)`), atau menyalin semua entri scope luar ke dalam dictionary scope dalam saat `_push()`. | Pencarian dari dalam ke luar (*innermost-first*, *Crafting Interpreters* Bab 11) secara alami mendukung dua fitur sekaligus: (1) *shadowing*, di mana alias lokal di subquery menutupi alias bernama sama di query luar, dan (2) *correlated subquery*, di mana subquery tetap bisa merujuk alias query luar jika namanya tidak tertutupi. Menyalin entri ke scope anak ditolak karena akan merusak pemeriksaan deklarasi ganda dan aturan kolom tanpa qualifier. |
+| 5 | **Membatasi resolusi kolom tanpa qualifier (`nama`) hanya pada scope terdalam saja** (di-resolve jika tepat 1 tabel, warning ambigu jika >1 tabel, warning jika 0 tabel), tanpa menelusuri `scope.parent`. | Menelusuri `scope.parent` ke atas untuk kolom tanpa qualifier apabila di scope terdalam terdapat lebih dari satu tabel atau tidak ditemukan. | Karena ekstraktor bekerja **tanpa skema database** (SPESIFIKASI Bagian 4.3 & 7), resolver tidak tahu tabel mana yang sesungguhnya memiliki kolom `nama`. Membatasi hanya pada scope terdalam mencegah resolver menebak tabel secara salah lintas subquery. Kelemahannya, pada *correlated subquery* pengguna wajib menuliskan qualifier alias luar secara eksplisit jika ingin merujuk kolom tabel luar. |
