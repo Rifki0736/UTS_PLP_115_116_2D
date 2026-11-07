@@ -28,7 +28,7 @@ def test_bug2_kutip_ganda_di_dalam_string():
     assert [(t.type, t.value) for t in tokens[:-1]] == [(T.STRING, "O'Brien")]
 
 def test_bug3_and_di_kiri_or():
-    where = parse_sql("SELECT a FROM t WHERE a = 1 OR b = 2 AND c = 3;").statements[0].where
+    where = parse_sql("SELECT a FROM t WHERE a = 1 AND b = 2 OR c = 3;").statements[0].where
     assert where.op == "OR"
     assert where.left.op == "AND"
 
